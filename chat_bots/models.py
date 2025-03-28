@@ -12,7 +12,8 @@ class Participant(models.Model):
 class Conversation(models.Model):
     name = models.CharField(max_length=128, blank=True, null=True)
     participants = models.ManyToManyField(Participant, related_name='conversations')
-    is_group = models.BooleanField(default=False)
+    is_group = models.BooleanField(default=False)  # Existing field
+    is_one_to_one = models.BooleanField(default=False)  # New field with default
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -27,8 +28,7 @@ class Message(models.Model):
     read_by = models.ManyToManyField(Participant, related_name='read_messages', blank=True)
 
     class Meta:
-        ordering = ['-timestamp']
+        ordering = ['timestamp']
 
     def __str__(self):
         return f"{self.sender.name}: {self.content[:50]}"
-    

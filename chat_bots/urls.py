@@ -1,8 +1,14 @@
 from django.urls import path
-from .views import ParticipantAPIView, ConversationAPIView, MessageAPIView
+from . import views
+
+app_name = 'chat_bots'
 
 urlpatterns = [
-    path('participants/', ParticipantAPIView.as_view(), name='participants'),
-    path('conversations/', ConversationAPIView.as_view(), name='conversations'),
-    path('conversations/<int:conversation_id>/messages/', MessageAPIView.as_view(), name='messages'),
+    # API Endpoints
+    path('participants/', views.ParticipantAPIView.as_view(), name='participant_api'),
+    path('conversations/', views.ConversationAPIView.as_view(), name='conversation_api'),
+    path('messages/<int:conversation_id>/', views.MessageAPIView.as_view(), name='message_api'),
+    
+    # Chat Room View
+    path('chat/<str:room_name>/', views.chat_room, name='chat_room'),
 ]

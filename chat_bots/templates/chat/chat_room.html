@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chat Room: {{ room_name }}</title>
+    <style>
+        #chat-log { width: 100%; height: 400px; resize: none; }
+        #chat-message-input { width: 80%; }
+    </style>
+</head>
+<body>
+    <h2>Chat Room: {{ room_name }}</h2>
+    <textarea id="chat-log" readonly></textarea><br>
+    <input id="chat-message-input" type="text" placeholder="Type your message..."><br>
+    <button id="chat-message-submit">Send</button>
+
+    <script>
+        const roomName = "{{ room_name }}";
+        const participantName = "{{ participant_name }}";
+        const ws = new WebSocket(`ws://${window.location.host}/ws/chat/${roomName}/?participant=${participantName}`);
+    
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            const chatLog = document.querySelector("#chat-log");
+            chatLog.value += `[${data.timestamp}] ${data.sender}: ${data.message}\n`;
+            chatLog.scrollTop = chatLog.scrollHeight;
+        };
+    
+        ws.onopen = function() {
+            console.log(`Connected to WebSocket as ${participantName}`);
+        };
+    
+        ws.onerror = function(error) {
+            console.error("WebSocket error:", error);
+        };
+    
+        document.querySelector("#chat-message-submit").onclick = function() {
+            const messageInput = document.querySelector("#chat-message-input");
+            const message = messageInput.value.trim();
+            if (message) {
+                ws.send(JSON.stringify({
+                    'message': message,
+                    'sender': participantName
+                }));
+                messageInput.value = '';
+            }
+        };
+    </script>
+</body>
+</html>
