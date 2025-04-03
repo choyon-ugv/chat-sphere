@@ -1,78 +1,141 @@
-from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from django.shortcuts import render
+from rest_framework import status, permissions
+from rest_framework.exceptions import NotFound, PermissionDenied
+from django.contrib.auth import get_user_model
 from .models import Participant, Conversation, Message
-from .serializers import ParticipantSerializer, ConversationSerializer, MessageSerializer
-from django.contrib.auth.models import User  # For authentication (optional)
+from .serializers import (
+    ParticipantSerializer,
+    ConversationSerializer,
+    MessageSerializer,
+    ConversationDetailSerializer
+)
+
+User = get_user_model()
 
 class ParticipantAPIView(APIView):
-    def post(self, request):
-        name = request.data.get('name')
-        if not name:
-            return Response({'error': 'Name is required'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        participant, created = Participant.objects.get_or_create(name=name)
-        serializer = ParticipantSerializer(participant)
-        return Response({
-            'status': 200,
-            'success': True,
-            'data': serializer.data
-        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        try:
+            participant = request.user.participant
+            serializer = ParticipantSerializer(participant)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Participant.DoesNotExist:
+            return Response(
+                {"detail": "Participant profile not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 class ConversationAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
     def get(self, request):
-        conversations = Conversation.objects.all().prefetch_related('participants', 'messages')
-        serializer = ConversationSerializer(conversations, many=True)
-        return Response({
-            'status': 200,
-            'success': True,
-            'data': serializer.data
-        }, status=status.HTTP_200_OK)
+        participant = request.user.participant
+        conversations = participant.conversations.all().prefetch_related(
+            'participants__user',
+            'messages'
+        ).order_by('-updated_at')
+        
+        serializer = ConversationSerializer(
+            conversations, 
+            many=True,
+            context={'request': request}
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
         participant_ids = request.data.get('participant_ids', [])
-        if len(participant_ids) < 2:
-            return Response({'error': 'At least two participants are required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not isinstance(participant_ids, list) or len(participant_ids) < 1:
+            return Response(
+                {"detail": "At least one participant is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Ensure current user is included
+        current_participant = request.user.participant
+        if current_participant.id not in participant_ids:
+            participant_ids.append(current_participant.id)
 
         serializer = ConversationSerializer(data=request.data)
         if serializer.is_valid():
-            conversation = serializer.save()
-            participants = Participant.objects.filter(id__in=participant_ids)
-            conversation.participants.set(participants)
-            # Set is_one_to_one or is_group based on participant count
-            conversation.is_one_to_one = len(participant_ids) == 2
-            conversation.is_group = len(participant_ids) > 2
-            conversation.save()
-            return Response(ConversationSerializer(conversation).data, status=status.HTTP_201_CREATED)
+            conversation = serializer.save(is_group=len(participant_ids) > 2)
+            
+            try:
+                participants = Participant.objects.filter(id__in=participant_ids)
+                conversation.participants.set(participants)
+            except Participant.DoesNotExist:
+                return Response(
+                    {"detail": "One or more participants not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            return Response(
+                ConversationDetailSerializer(conversation).data,
+                status=status.HTTP_201_CREATED
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class ConversationDetailAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self, pk, participant):
+        try:
+            return Conversation.objects.prefetch_related(
+                'participants__user',
+                'messages__sender__user'
+            ).get(
+                pk=pk,
+                participants=participant
+            )
+        except Conversation.DoesNotExist:
+            raise NotFound("Conversation not found or access denied")
+
+    def get(self, request, pk):
+        conversation = self.get_object(pk, request.user.participant)
+        serializer = ConversationDetailSerializer(conversation)
+        return Response(serializer.data)
+
+    def delete(self, request, pk):
+        conversation = self.get_object(pk, request.user.participant)
+        conversation.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 class MessageAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_conversation(self, pk, participant):
+        try:
+            return Conversation.objects.get(
+                pk=pk,
+                participants=participant
+            )
+        except Conversation.DoesNotExist:
+            raise PermissionDenied("Conversation not found or access denied")
+
     def get(self, request, conversation_id):
-        messages = Message.objects.filter(conversation_id=conversation_id).select_related('sender')
+        conversation = self.get_conversation(conversation_id, request.user.participant)
+        messages = conversation.messages.select_related(
+            'sender__user'
+        ).order_by('timestamp')
+        
         serializer = MessageSerializer(messages, many=True)
-        return Response({
-            'status': 200,
-            'success': True,
-            'data': serializer.data
-        }, status=status.HTTP_200_OK)
+        return Response(serializer.data)
 
     def post(self, request, conversation_id):
-        sender_name = request.data.get('sender')
-        content = request.data.get('content')
+        conversation = self.get_conversation(conversation_id, request.user.participant)
+        serializer = MessageSerializer(data=request.data)
         
-        if not sender_name or not content:
-            return Response({'error': 'Both sender and content are required'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            sender = Participant.objects.get(name=sender_name)
-            conversation = Conversation.objects.get(id=conversation_id)
-            message = Message.objects.create(conversation=conversation, sender=sender, content=content)
-            return Response(MessageSerializer(message).data, status=status.HTTP_201_CREATED)
-        except (Participant.DoesNotExist, Conversation.DoesNotExist) as e:
-            return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
-
-# chat/views.py
+        if serializer.is_valid():
+            serializer.save(
+                conversation=conversation,
+                sender=request.user.participant
+            )
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
 def chat_room(request, room_name):
     print(f"Accessed chat room: {room_name} with participant: {request.GET.get('participant')}")
     participant_name = request.GET.get('participant', 'User')
