@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% comment %} <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -374,6 +374,335 @@
             document.querySelector('.sidebar').classList.add('active');
             document.querySelector('.chat-area').classList.remove('active');
         }
+    </script>
+</body>
+</html> {% endcomment %}
+
+
+{% comment %} <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Room: {{ room_name }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .chat-container {
+            max-width: 800px;
+            margin: 20px auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .chat-header {
+            background: #0084ff;
+            color: white;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        #chat-log {
+            height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+        .received {
+            background: #e4e6eb;
+            margin-right: auto;
+            border-bottom-left-radius: 5px;
+        }
+        .sent {
+            background: #0084ff;
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 5px;
+        }
+        .message-time {
+            font-size: 11px;
+            margin-top: 5px;
+            text-align: right;
+        }
+        .input-area {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #ddd;
+        }
+        #chat-message-input {
+            flex: 1;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            outline: none;
+        }
+        #chat-message-submit {
+            background: #0084ff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+        .online-status {
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            {{ room_name }} Chat
+            <div class="online-status" id="online-status"></div>
+        </div>
+        <div id="chat-log"></div>
+        <div class="input-area">
+            <input id="chat-message-input" type="text" placeholder="Type your message...">
+            <button id="chat-message-submit">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const roomName = "{{ room_name }}";
+        const participantName = "{{ participant_name }}";
+        const ws = new WebSocket(
+            `ws://${window.location.host}/ws/chat/${roomName}/`
+        );
+
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function addMessage(data, isSent = false) {
+            const chatLog = document.getElementById('chat-log');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
+            
+            messageDiv.innerHTML = `
+                <div>${data.message}</div>
+                <div class="message-time">${formatTime(data.timestamp)}</div>
+            `;
+            
+            chatLog.appendChild(messageDiv);
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+
+        ws.onopen = function() {
+            console.log('WebSocket connection established');
+            // Send participant info on connect
+            ws.send(JSON.stringify({
+                'type': 'participant_info',
+                'participant': participantName
+            }));
+        };
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if (data.type === 'participant_update') {
+                document.getElementById('online-status').textContent = 
+                    `${data.count} participant(s) online`;
+            } else {
+                const isSent = data.sender_id === '{{ request.user.participant.id }}';
+                addMessage(data, isSent);
+            }
+        };
+
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+        };
+
+        ws.onclose = function() {
+            console.log('WebSocket connection closed');
+        };
+
+        document.getElementById('chat-message-submit').onclick = function() {
+            sendMessage();
+        };
+
+        document.getElementById('chat-message-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function sendMessage() {
+            const messageInput = document.getElementById('chat-message-input');
+            const message = messageInput.value.trim();
+            if (message) {
+                const messageData = {
+                    'message': message,
+                    'timestamp': new Date().toISOString()
+                };
+                ws.send(JSON.stringify(messageData));
+                addMessage({
+                    message: message,
+                    timestamp: new Date().toISOString(),
+                    sender_id: '{{ request.user.participant.id }}'
+                }, true);
+                messageInput.value = '';
+            }
+        }
+    </script>
+</body>
+</html> {% endcomment %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ room_name }} Chat</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .chat-container { max-width: 800px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }
+        .chat-header { background: #0084ff; color: white; padding: 15px; font-size: 18px; text-align: center; }
+        #chat-log { height: 400px; overflow-y: auto; padding: 15px; background: #f8f9fa; }
+        .message { margin-bottom: 15px; padding: 10px 15px; border-radius: 18px; max-width: 70%; word-wrap: break-word; }
+        .received { background: #e4e6eb; margin-right: auto; border-bottom-left-radius: 5px; }
+        .sent { background: #0084ff; color: white; margin-left: auto; border-bottom-right-radius: 5px; }
+        .system { color: #666; text-align: center; margin: 10px 0; font-size: 0.8em; }
+        .message-time { font-size: 0.7em; margin-top: 5px; text-align: right; opacity: 0.8; }
+        .received .message-time { color: #666; }
+        .sent .message-time { color: rgba(255,255,255,0.8); }
+        .input-area { display: flex; padding: 15px; border-top: 1px solid #ddd; background: white; }
+        #chat-message-input { flex: 1; padding: 10px 15px; border: 1px solid #ddd; border-radius: 20px; outline: none; }
+        #chat-message-submit { background: #0084ff; color: white; border: none; border-radius: 20px; padding: 10px 20px; margin-left: 10px; cursor: pointer; }
+        #status { font-size: 0.8em; margin-top: 5px; }
+        .online { color: #31a24c; }
+        .offline { color: #ccc; }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            {{ room_name }} Chat
+            <div id="status" class="online">Connecting...</div>
+        </div>
+        <div id="chat-log"></div>
+        <div class="input-area">
+            <input id="chat-message-input" type="text" placeholder="Type your message..." autocomplete="off">
+            <button id="chat-message-submit">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const roomName = "{{ room_name }}";
+        const urlParams = new URLSearchParams(window.location.search);
+        const participantName = urlParams.get('participant') || '{{ request.user.username }}';
+        
+        const ws = new WebSocket(
+            `ws://${window.location.host}/ws/chat/${roomName}/?participant=${participantName}`
+        );
+        
+        const chatLog = document.getElementById('chat-log');
+        const messageInput = document.getElementById('chat-message-input');
+        const statusDiv = document.getElementById('status');
+        const messageIds = new Set();
+
+        function formatTimestamp(timestamp) {
+            return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function addMessage(data, type) {
+            // Skip duplicates
+            if (data.message_id && messageIds.has(data.message_id)) {
+                return;
+            }
+            if (data.message_id) {
+                messageIds.add(data.message_id);
+            }
+
+            const messageDiv = document.createElement('div');
+            
+            if (type === 'system') {
+                messageDiv.className = 'system';
+                messageDiv.innerHTML = `
+                    <div>${data.message}</div>
+                    <div class="message-time">${formatTimestamp(data.timestamp)}</div>
+                `;
+            } else {
+                messageDiv.className = `message ${type}`;
+                const displayName = type === 'sent' ? 'You' : data.sender;
+                messageDiv.innerHTML = `
+                    <div>${data.message}</div>
+                    <div class="message-time">${formatTimestamp(data.timestamp)} • ${displayName}</div>
+                `;
+            }
+            
+            chatLog.appendChild(messageDiv);
+            chatLog.scrollTop = chatLog.scrollHeight;
+        }
+
+        ws.onopen = () => {
+            statusDiv.textContent = 'Connected';
+            statusDiv.className = 'online';
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'chat') {
+                const isCurrentUser = data.sender_id === '{{ request.user.participant.id }}';
+                addMessage(data, isCurrentUser ? 'sent' : 'received');
+            } 
+            else if (data.type === 'system') {
+                // Don't show own join/leave messages
+                if (!data.message.includes(participantName)) {
+                    addMessage(data, 'system');
+                }
+            }
+        };
+
+        ws.onerror = (error) => {
+            statusDiv.textContent = 'Connection error';
+            statusDiv.className = 'offline';
+            console.error('WebSocket error:', error);
+        };
+
+        ws.onclose = () => {
+            statusDiv.textContent = 'Disconnected';
+            statusDiv.className = 'offline';
+        };
+
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (message && ws.readyState === WebSocket.OPEN) {
+                // Optimistic update
+                addMessage({
+                    message: message,
+                    timestamp: new Date().toISOString(),
+                    sender: participantName,
+                    message_id: 'temp-' + Date.now()
+                }, 'sent');
+                
+                // Send to server
+                ws.send(JSON.stringify({
+                    'message': message
+                }));
+                
+                messageInput.value = '';
+            }
+        }
+
+        document.getElementById('chat-message-submit').addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
     </script>
 </body>
 </html>

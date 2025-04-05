@@ -45,15 +45,15 @@ class ConversationSerializer(serializers.ModelSerializer):
             return obj.messages.exclude(read_by=participant).count()
         return 0
 
-class ConversationDetailSerializer(serializers.ModelSerializer):
-    participants = ParticipantSerializer(many=True, read_only=True)
-    messages = serializers.SerializerMethodField()
+# class ConversationDetailSerializer(serializers.ModelSerializer):
+#     participants = ParticipantSerializer(many=True, read_only=True)
+#     messages = serializers.SerializerMethodField()
 
-    class Meta:
-        model = Conversation
-        fields = ['id', 'name', 'participants', 'is_group', 'created_at', 'updated_at', 'messages']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+#     class Meta:
+#         model = Conversation
+#         fields = ['id', 'name', 'participants', 'is_group', 'created_at', 'updated_at', 'messages']
+#         read_only_fields = ['id', 'created_at', 'updated_at']
 
-    def get_messages(self, obj):
-        messages = obj.messages.all().order_by('timestamp')
-        return MessageSerializer(messages, many=True).data
+#     def get_messages(self, obj):
+#         messages = obj.messages.all().order_by('timestamp')
+#         return MessageSerializer(messages, many=True).data
